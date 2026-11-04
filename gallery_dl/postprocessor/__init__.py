@@ -15,6 +15,7 @@ modules = {
     "directory",
     "exec",
     "hash",
+    "manifest",
     "metadata",
     "mtime",
     "python",

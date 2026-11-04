@@ -8753,6 +8753,44 @@ Note
     making it possible to use ``"name": "hash/<fieldname>@<event>"``
 
 
+manifest.fields
+---------------
+Type
+    ``object`` (`field name` -> `Format String`_)
+Default
+    .. code:: json
+
+        {
+            "author" : "{username|author[name]|user[name]|uploader|artist|author}",
+            "date"   : "{post_date|date|published|created_at}",
+            "url"    : "{post_url|page_url|tweet_url|permalink}",
+            "caption": "{description|caption|content|text|title}"
+        }
+Description
+    Format strings for the ``author``, ``date``, ``url``, and ``caption``
+    values of a manifest file.
+
+    Values given here replace their default. Each one is evaluated with
+    the metadata of the first file of a post. An empty ``url`` falls back
+    to the input URL, and an empty ``caption`` omits its section.
+
+    Files get listed by their ``num`` field, regardless of download order.
+    Without it, they get listed in download order.
+
+
+manifest.filename
+-----------------
+Type
+    ``string``
+Default
+    ``"{post_shortcode|post_id|id|filename}.manifest.md"``
+Description
+    A `Format String`_ for the name of a manifest file.
+
+    Manifest files get written to a post's target directory
+    after all of its files were processed.
+
+
 metadata.mode
 -------------
 Type
@@ -10357,6 +10395,8 @@ Description
         Execute external commands
     ``hash``
         Compute file hash digests
+    ``manifest``
+        Write a markdown file listing the files of a post in post order
     ``metadata``
         Write metadata to separate files
     ``mtime``

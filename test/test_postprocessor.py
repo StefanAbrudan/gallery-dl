@@ -575,6 +575,128 @@ class HashTest(BasePostprocessorTest):
             kwdict["sha512"], "sha512")
 
 
+class ManifestTest(BasePostprocessorTest):
+
+    POST = {
+        "username"      : "user",
+        "post_shortcode": "ABC123",
+        "post_date"     : datetime(2026, 1, 2, 3, 4, 5),
+        "post_url"      : "https://example.org/p/ABC123/",
+        "description"   : "line one\n# not a heading",
+    }
+
+    def _file(self, num, name, event="after", **extra):
+        kwdict = {**self.POST, "num": num, "filename": name,
+                  "extension": "jpg", **extra}
+        self.pathfmt.set_filename(kwdict)
+        self.pathfmt.build_path()
+        self._trigger((event,))
+
+    def _read(self, name="ABC123.manifest.md"):
+        path = os.path.join(self.pathfmt.realdirectory, name)
+        with open(path, encoding="utf-8") as fp:
+            return fp.read()
+
+    def test_manifest_post_order(self):
+        self._create(None, self.POST)
+        self._trigger(("post",))
+        # arrival order differs from post order
+        self._file(3, "c")
+        self._file(1, "z")
+        self._file(2, "a")
+        self._trigger(("post-after",))
+
+        self.assertEqual(self._read(), """\
+# ABC123
+
+- Author: user
+- Date: 2026-01-02 03:04:05
+- Source: https://example.org/p/ABC123/
+
+## Caption
+
+> line one
+> # not a heading
+
+## Files
+
+1. [z.jpg](z.jpg)
+2. [a.jpg](a.jpg)
+3. [c.jpg](c.jpg)
+""")
+
+    def test_manifest_skip_and_error(self):
+        self._create(None, self.POST)
+        self._trigger(("post",))
+        self._file(2, "skipped", "skip")
+        self._file(3, "broken", "error")
+        self._file(1, "with space")
+        self._trigger(("post-after",))
+
+        self.assertTrue(self._read().endswith("""\
+1. [with space.jpg](with%20space.jpg)
+2. [skipped.jpg](skipped.jpg)
+3. broken.jpg (failed)
+"""))
+
+    def test_manifest_no_num(self):
+        self._create(None, self.POST)
+        self._trigger(("post",))
+        self._file(None, "b")
+        self._file(None, "a")
+        self._trigger(("post-after",))
+
+        self.assertTrue(self._read().endswith("""\
+1. [b.jpg](b.jpg)
+2. [a.jpg](a.jpg)
+"""))
+
+    def test_manifest_one_file_per_post(self):
+        self._create(None, self.POST)
+        self._trigger(("post",))
+        self._file(1, "a", post_shortcode="ONE")
+        self._trigger(("post-after", "post"))
+        self._file(1, "b", post_shortcode="TWO")
+        self._trigger(("post-after",))
+
+        self.assertIn("[a.jpg]", self._read("ONE.manifest.md"))
+        self.assertNotIn("[b.jpg]", self._read("ONE.manifest.md"))
+        self.assertIn("[b.jpg]", self._read("TWO.manifest.md"))
+
+    def test_manifest_no_files(self):
+        self._create({"filename": "empty.md"}, self.POST)
+        self._trigger(("post", "post-after"))
+
+        self.assertFalse(os.path.exists(os.path.join(
+            self.pathfmt.realdirectory, "empty.md")))
+
+    def test_manifest_missing_metadata(self):
+        self._create({"filename": "bare.md"}, {})
+        self._trigger(("post",))
+        kwdict = {"num": 1, "filename": "a", "extension": "jpg"}
+        self.pathfmt.set_filename(kwdict)
+        self.pathfmt.build_path()
+        self._trigger(("after", "post-after"))
+
+        content = self._read("bare.md")
+        self.assertIn("- Author: \n", content)
+        self.assertIn(f"- Source: {self.job.extractor.url}\n", content)
+        self.assertNotIn("## Caption", content)
+
+    def test_manifest_custom_fields(self):
+        self._create({
+            "filename": "custom.md",
+            "fields"  : {"author": "{foo}", "date": "{post_date:%Y}"},
+        }, self.POST)
+        self._trigger(("post",))
+        self._file(1, "a", foo="bar")
+        self._trigger(("post-after",))
+
+        content = self._read("custom.md")
+        self.assertIn("- Author: bar\n", content)
+        self.assertIn("- Date: 2026\n", content)
+
+
 class MetadataTest(BasePostprocessorTest):
 
     def test_metadata_default(self):
